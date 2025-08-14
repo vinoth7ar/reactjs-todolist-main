@@ -1,33 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
-import ReactFlow, {
+import {
+  ReactFlow,
   Background,
   Controls,
   Handle,
   Position,
   useEdgesState,
   useNodesState,
-  Node,
-  Edge,
+  type Node as RFNode,
+  type Edge as RFEdge,
   type NodeProps,
-} from "reactflow";
-import "reactflow/dist/style.css";
-import {
-  Box,
-  CardContent,
-  Chip,
-  Divider,
-  Paper,
-  Typography,
-  Checkbox,
-  FormControlLabel,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  Button,
-} from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 
 type Step = { name: string; status: string; description?: string };
 type Entity = { label: string; emphasis?: boolean };
@@ -43,50 +27,40 @@ type WorkflowData = {
 const AppFrameNode: React.FC<NodeProps<{ title: string }>> = ({ data }) => (
   <div className="relative w-full h-full rounded-3xl border border-gray-300 bg-transparent shadow-sm">
     <div className="absolute -top-6 left-4">
-      <div className="flex items-center gap-1 rounded-2xl bg-gray-900 text-white px-3 py-1 shadow">
+      <div className="flex items-center gap-2 rounded-2xl bg-gray-900 text-white px-3 py-1 shadow">
         <span className="font-semibold tracking-wide">{data.title}</span>
-        <MoreVertIcon fontSize="small" />
+        <span className="opacity-80">•••</span>
       </div>
     </div>
     <div className="h-full w-full rounded-3xl border-2 border-dotted border-gray-300 p-6 bg-transparent" />
   </div>
 );
 
-const SectionHeaderNode: React.FC<NodeProps<{ text: string; variant?: string }>> = ({ data }) => (
+const SectionHeaderNode: React.FC<NodeProps<{ text: string }>> = ({ data }) => (
   <div className="pointer-events-none select-none">
-    <Typography variant={(data.variant as any) || "h6"} className="!font-semibold !text-gray-900">
-      {data.text}
-    </Typography>
+    <div className="font-semibold text-gray-900 text-lg">{data.text}</div>
   </div>
 );
 
 const StageCardNode: React.FC<NodeProps<{ title: string; body?: string; index?: number }>> = ({ data }) => (
-  <Paper elevation={0} className="border border-gray-500 bg-[#e8f7e8] w-[360px]">
-    <CardContent className="p-3">
+  <div className="border border-gray-500 bg-[#e8f7e8] w-[360px]">
+    <div className="p-3">
       <div className="flex items-center gap-2 mb-1">
         {typeof data.index === "number" && (
           <div className="w-6 h-6 rounded-full grid place-items-center bg-green-600 text-white text-xs font-bold">{data.index + 1}</div>
         )}
-        <Typography variant="subtitle2" className="!font-bold">
-          {data.title}
-        </Typography>
+        <div className="font-semibold">{data.title}</div>
       </div>
-      {data.body && (
-        <Typography variant="body2" className="!leading-snug text-gray-800">
-          {data.body}
-        </Typography>
-      )}
-    </CardContent>
+      {data.body && <div className="text-sm leading-snug text-gray-800">{data.body}</div>}
+    </div>
     <Handle id="left" type="target" position={Position.Left} />
     <Handle id="right" type="source" position={Position.Right} />
-  </Paper>
+  </div>
 );
 
 const EventNode: React.FC<NodeProps<{ label: string }>> = ({ data }) => (
   <div className="w-[110px] h-[110px] rounded-full border border-gray-600 bg-white grid place-items-center">
-    <Typography variant="body1" className="whitespace-pre-line text-center !text-gray-800">
-      {data.label}
-    </Typography>
+    <div className="text-gray-800 text-sm whitespace-pre-line text-center">{data.label}</div>
     <Handle id="left" type="target" position={Position.Left} />
     <Handle id="right" type="source" position={Position.Right} />
   </div>
@@ -100,13 +74,13 @@ const DataEntityTagNode: React.FC<NodeProps<{ label: string; emphasis?: boolean;
     }`}
   >
     <span className="text-sm font-medium text-gray-900">{data.label}</span>
-    <MoreVertIcon fontSize="small" className="text-gray-600" />
+    <span className="text-gray-600">•••</span>
   </button>
 );
 
 const ToggleNode: React.FC<NodeProps<{ expanded: boolean; onToggle: () => void }>> = ({ data }) => (
   <button onClick={data.onToggle} className="flex items-center gap-2 text-sky-700">
-    {data.expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+    <span>{data.expanded ? "▲" : "▼"}</span>
     <span className="underline">See Data Entities</span>
   </button>
 );
@@ -114,13 +88,13 @@ const ToggleNode: React.FC<NodeProps<{ expanded: boolean; onToggle: () => void }
 const nodeTypes = { app: AppFrameNode, section: SectionHeaderNode, stage: StageCardNode, event: EventNode, tag: DataEntityTagNode, toggle: ToggleNode };
 
 function buildGraph(data: WorkflowData, expanded: boolean, selectedEntity: string | null, onEntityClick: (label: string) => void, onToggle: () => void) {
-  const nodes: Node[] = [];
-  const edges: Edge[] = [];
+  const nodes: RFNode[] = [];
+  const edges: RFEdge[] = [];
   const frameWidth = Math.max(1040, 160 + data.steps.length * (360 + 140));
   const frameHeight = 720;
 
   nodes.push({ id: "app", type: "app", position: { x: 40, y: 40 }, data: { title: data.appTitle }, style: { width: frameWidth, height: frameHeight }, draggable: false });
-  nodes.push({ id: "title", type: "section", position: { x: 80, y: 70 }, data: { text: data.workflowTitle, variant: "h5" }, parentNode: "app", extent: "parent", draggable: false });
+  nodes.push({ id: "title", type: "section", position: { x: 80, y: 70 }, data: { text: data.workflowTitle }, parentNode: "app", extent: "parent", draggable: false });
 
   const startX = 80, yRect = 160, rectW = 360, gapX = 140, yCircle = 320;
 
@@ -197,8 +171,8 @@ export default function WorkflowVisualizer({ workflows }: { workflows?: Workflow
 
   const graph = useMemo(() => buildGraph(current, expanded, selectedEntity, onEntityClick, () => setExpanded(e => !e)), [current, expanded, selectedEntity]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
 
   useEffect(() => { setNodes(graph.nodes); setEdges(graph.edges); }, [graph, setNodes, setEdges]);
 
@@ -209,64 +183,70 @@ export default function WorkflowVisualizer({ workflows }: { workflows?: Workflow
       <div className="flex items-center justify-between px-6 py-3 border-b bg-white">
         <div className="flex items-center gap-3">
           <span className="text-sky-700 font-bold">EBM Studio</span>
-          <Divider orientation="vertical" flexItem className="!mx-2" />
+          <div className="mx-2 h-5 w-px bg-gray-300" />
           <div className="text-gray-600">{current.appTitle} ▾</div>
         </div>
         <div className="text-sm text-gray-500">Single Views + Search</div>
       </div>
       <div className="grid grid-cols-[1fr_320px] h-[calc(100vh-52px)]">
         <div className="relative">
-          <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} nodeTypes={nodeTypes} fitView proOptions={{ hideAttribution: true }}>
+          <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} nodeTypes={nodeTypes} fitView>
             <Background />
             <Controls position="bottom-left" />
           </ReactFlow>
         </div>
         <div className="border-l bg-white p-4 overflow-y-auto">
-          <Typography variant="subtitle1" className="!mb-3 !font-semibold">Customize View</Typography>
-          <Paper variant="outlined" className="p-3 mb-6">
-            <FormControlLabel control={<Checkbox checked={expanded} onChange={() => setExpanded(e => !e)} />} label="Expand all data entities" />
-            <Divider className="!my-3" />
-            <Typography variant="caption" className="!text-gray-600 !uppercase">Legend</Typography>
-            <Box className="mt-2 space-y-2">
-              <Chip label="Application" size="small" />
-              <Chip label="Workflow" size="small" />
-              <Chip label="Business Event" size="small" />
-              <Chip label="Data Entity" size="small" />
-            </Box>
-          </Paper>
-          <Typography variant="subtitle1" className="!mb-3 !font-semibold">Other Workflows</Typography>
+          <div className="mb-3 font-semibold">Customize View</div>
+          <div className="border border-gray-200 rounded-md p-3 mb-6">
+            <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={expanded} onChange={() => setExpanded(e => !e)} className="h-4 w-4" />
+              <span>Expand all data entities</span>
+            </label>
+            <div className="my-3 h-px bg-gray-200" />
+            <div className="text-[10px] uppercase text-gray-600">Legend</div>
+            <div className="mt-2 space-y-2">
+              <div className="inline-block rounded-full border px-2 py-0.5 text-xs">Application</div>
+              <div className="inline-block rounded-full border px-2 py-0.5 text-xs">Workflow</div>
+              <div className="inline-block rounded-full border px-2 py-0.5 text-xs">Business Event</div>
+              <div className="inline-block rounded-full border px-2 py-0.5 text-xs">Data Entity</div>
+            </div>
+          </div>
+          <div className="mb-3 font-semibold">Other Workflows</div>
           <div className="space-y-2">
             {wfList.map(w => (
-              <Paper key={w.id} onClick={() => setCurrentId(w.id)} variant="outlined" className={`p-3 flex items-center justify-between hover:shadow-sm cursor-pointer ${current.id === w.id ? "ring-2 ring-sky-600" : ""}`}>
+              <div key={w.id} onClick={() => setCurrentId(w.id)} className={`border rounded-md p-3 flex items-center justify-between hover:shadow-sm cursor-pointer ${current.id === w.id ? "ring-2 ring-sky-600" : ""}`}>
                 <span className="text-gray-800">{w.appTitle} — {w.workflowTitle}</span>
                 <div className="w-6 h-6 grid place-items-center rounded-full bg-yellow-400 font-semibold">M</div>
-              </Paper>
+              </div>
             ))}
           </div>
-          <Typography variant="subtitle1" className="!mt-6 !mb-2 !font-semibold">Event Explorer</Typography>
+          <div className="mt-6 mb-2 font-semibold">Event Explorer</div>
           <div className="space-y-2">
             {current.steps.map((s, i) => (
-              <Paper key={i} variant="outlined" className="p-2 flex items-start gap-3">
+              <div key={i} className="border rounded-md p-2 flex items-start gap-3">
                 <div className="w-6 h-6 rounded-full grid place-items-center bg-sky-700 text-white text-xs font-bold">{i + 1}</div>
                 <div>
                   <div className="font-semibold text-sm">{s.name}</div>
                   {s.description && <div className="text-xs text-gray-600">{s.description}</div>}
                   <div className="text-xs text-gray-500">Status: {s.status}</div>
                 </div>
-              </Paper>
+              </div>
             ))}
           </div>
         </div>
       </div>
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{selectedEntity}</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">Details for {selectedEntity} would appear here.</Typography>
-          <Box className="mt-4 flex justify-end">
-            <Button onClick={() => setDialogOpen(false)} variant="contained">Close</Button>
-          </Box>
-        </DialogContent>
-      </Dialog>
+      {dialogOpen && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setDialogOpen(false)} />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-lg shadow-lg">
+            <div className="px-4 py-3 border-b font-semibold">{selectedEntity}</div>
+            <div className="p-4 text-sm">Details for {selectedEntity} would appear here.</div>
+            <div className="px-4 py-3 border-t flex justify-end">
+              <button onClick={() => setDialogOpen(false)} className="px-3 py-1.5 rounded-md bg-sky-600 text-white">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
