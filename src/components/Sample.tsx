@@ -1,21 +1,972 @@
 // ============================================================================
-// SINGLE VIEW - ALL IN ONE FILE
+// SINGLE VIEW - ALL IN ONE FILE (Material UI Version - Fixed)
 // ============================================================================
-// This file contains the complete SingleView functionality.
+// This file contains the complete SingleView functionality using only Material UI components.
 // It can be split into separate files later using the comment sections below.
 
-import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, ReactNode, useCallback, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { Eye, ArrowLeft, Settings, ArrowRight } from 'lucide-react';
-import { mockWorkflows } from '@/components/workflow/mock-data';
-import { WorkflowData, LayoutConfig } from '@/components/workflow/types';
-import WorkflowBuilder from '@/components/workflow/WorkflowBuilder';
+import {
+  ReactFlow,
+  addEdge,
+  Controls,
+  Background,
+  useNodesState,
+  useEdgesState,
+  Connection,
+  Edge,
+  Node,
+  Handle,
+  Position,
+  NodeProps,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  Typography,
+  Chip,
+  Switch,
+  FormControlLabel,
+  Divider,
+  Container,
+  Box,
+  Paper,
+  Grid,
+  IconButton,
+  Tabs,
+  Tab,
+  AppBar,
+  Toolbar,
+  Stack
+} from '@mui/material';
+import {
+  Visibility,
+  ArrowBack,
+  Settings,
+  ArrowForward
+} from '@mui/icons-material';
+// ============================================================================
+// WORKFLOW BUILDER DEPENDENCIES SECTION (All Inlined)
+// ============================================================================
+// SPLIT SUGGESTION: Move to separate files as indicated in comments
+
+// ===========================================
+// WORKFLOW NODE DATA INTERFACE (from WorkflowNode.tsx)
+// SPLIT TO: src/components/workflow/WorkflowNode.tsx
+// ===========================================
+export interface WorkflowNodeData extends Record<string, unknown> {
+  title: string;
+  description?: string;
+  type: 'workflow' | 'stage' | 'data' | 'process' | 'pmf-tag' | 'entities-group';
+  items?: string[];
+  entities?: Array<{ id: string; title: string; color?: string }>;
+  onClick?: () => void;
+  entitiesExpanded?: boolean;
+  onToggleEntities?: () => void;
+  isSelected?: boolean;
+  color?: string;
+}
+
+// ===========================================
+// CIRCULAR NODE DATA INTERFACE (from CircularNode.tsx)
+// SPLIT TO: src/components/workflow/CircularNode.tsx
+// ===========================================
+export interface CircularNodeData extends Record<string, unknown> {
+  label: string;
+  onClick?: () => void;
+  color?: string;
+}
+
+// ===========================================
+// WORKFLOW NODE COMPONENT (from WorkflowNode.tsx)
+// SPLIT TO: src/components/workflow/WorkflowNode.tsx
+// ===========================================
+const WorkflowNode = ({ data }: NodeProps) => {
+  const nodeData = data as WorkflowNodeData;
+  const getNodeStyles = () => {
+    switch (nodeData.type) {
+      case 'workflow':
+        return 'bg-workflow-canvas border-2 border-dashed border-workflow-border rounded-lg min-w-[800px] min-h-[450px] p-6 relative';
+      case 'stage':
+        return 'bg-workflow-node-bg border border-workflow-stage-border rounded-sm p-4 min-w-[240px] min-h-[100px] cursor-pointer hover:shadow-lg transition-all duration-200 shadow-sm';
+      case 'data':
+        let bgColor = 'bg-workflow-data-bg';
+        if (nodeData.color === 'yellow') {
+          bgColor = 'bg-workflow-data-bg';
+        }
+        return `${bgColor} border border-workflow-data-border px-4 py-2 text-sm font-medium cursor-pointer hover:shadow-md transition-shadow transform rotate-[-2deg] shadow-sm`;
+      case 'pmf-tag':
+        return 'bg-workflow-pmf-bg text-workflow-pmf-text px-3 py-1 text-sm font-bold cursor-pointer hover:opacity-90 transition-opacity transform skew-x-[15deg] shadow-md';
+      case 'process':
+        return 'bg-workflow-process-bg text-workflow-process-text border-workflow-stage-border border rounded px-3 py-1 text-sm font-medium cursor-pointer hover:shadow-md transition-shadow';
+      case 'entities-group':
+        return 'bg-workflow-node-bg border border-workflow-stage-border rounded-sm p-4 min-w-[520px] cursor-pointer hover:shadow-lg transition-all duration-200 shadow-sm';
+      default:
+        return 'bg-workflow-node-bg border-workflow-node-border border rounded p-3 cursor-pointer hover:shadow-md transition-shadow';
+    }
+  };
+
+  const handleClick = () => {
+    if (nodeData.onClick) {
+      nodeData.onClick();
+    }
+    console.log(`Clicked ${nodeData.type} node:`, nodeData.title);
+  };
+
+  if (nodeData.type === 'pmf-tag') {
+    return (
+      <div className={getNodeStyles()} onClick={handleClick}>
+        <div className="font-bold">
+          {nodeData.title}
+        </div>
+      </div>
+    );
+  }
+
+  if (nodeData.type === 'data') {
+    return (
+      <div className={getNodeStyles()} onClick={handleClick}>
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{nodeData.title}</span>
+          <span className="text-xs font-bold">⋮</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (nodeData.type === 'entities-group') {
+    const handleIconClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (nodeData.onToggleEntities) {
+        nodeData.onToggleEntities();
+      }
+    };
+
+    return (
+      <div className={getNodeStyles()} onClick={handleClick}>
+        <div className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+          <span 
+            className="cursor-pointer select-none text-lg leading-none"
+            onClick={handleIconClick}
+          >
+            {nodeData.entitiesExpanded ? '▼' : '▲'}
+          </span>
+          <span>Modified Data Entities</span>
+        </div>
+        {nodeData.entitiesExpanded && (
+          <div className="flex flex-wrap gap-3">
+            {nodeData.entities?.map((entity) => {
+              const bgColor = entity.color === 'yellow' ? 'bg-workflow-data-bg' : 'bg-muted';
+              const borderColor = entity.color === 'yellow' ? 'border-workflow-data-border' : 'border-border';
+              return (
+                <div
+                  key={entity.id}
+                  className={`${bgColor} ${borderColor} border px-3 py-2 text-sm font-medium transform rotate-[-2deg] shadow-sm hover:shadow-md transition-shadow cursor-pointer`}
+                >
+                  <div className="flex items-center gap-1">
+                    <span>{entity.title}</span>
+                    <span className="text-xs font-bold">⋮</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (nodeData.type === 'workflow') {
+    return (
+      <div className={getNodeStyles()}>        
+        <div className="text-xl font-bold text-foreground mb-2">
+          {nodeData.title}
+        </div>
+        
+        {nodeData.description && (
+          <div className="text-sm text-muted-foreground mb-6">
+            {nodeData.description}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {/* Stage and Enrich boxes will be positioned inside */}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={getNodeStyles()} onClick={handleClick}>
+      <div className="text-sm font-bold text-foreground mb-2">
+        {nodeData.title}
+      </div>
+      {nodeData.description && (
+        <div className="text-xs text-muted-foreground leading-tight">
+          {nodeData.description}
+        </div>
+      )}
+      
+      <Handle type="target" position={Position.Top} className="w-2 h-2 bg-workflow-border rounded-none border border-workflow-border opacity-0" />
+      <Handle type="source" position={Position.Bottom} className="w-2 h-2 bg-workflow-border rounded-none border border-workflow-border opacity-0" />
+    </div>
+  );
+};
+
+const MemoizedWorkflowNode = memo(WorkflowNode);
+
+// ===========================================
+// CIRCULAR NODE COMPONENT (from CircularNode.tsx)
+// SPLIT TO: src/components/workflow/CircularNode.tsx
+// ===========================================
+const CircularNode = ({ data }: NodeProps) => {
+  const nodeData = data as CircularNodeData;
+  
+  const handleClick = () => {
+    if (nodeData.onClick) {
+      nodeData.onClick();
+    }
+    console.log('Clicked status node:', nodeData.label);
+  };
+
+  const getCircleStyles = () => {
+    return 'w-16 h-16 rounded-full bg-workflow-circular border border-workflow-circular-border flex items-center justify-center shadow-md cursor-pointer hover:shadow-lg transition-all duration-200';
+  };
+
+  return (
+    <div 
+      className={getCircleStyles()}
+      onClick={handleClick}
+    >
+      <div className="text-[10px] font-bold text-center text-foreground px-1 leading-tight">
+        {nodeData.label}
+      </div>
+      
+      <Handle type="target" position={Position.Top} className="w-2 h-2 bg-workflow-border rounded-none border border-workflow-border opacity-0" />
+      <Handle type="source" position={Position.Bottom} className="w-2 h-2 bg-workflow-border rounded-none border border-workflow-border opacity-0" />
+    </div>
+  );
+};
+
+const MemoizedCircularNode = memo(CircularNode);
+
+// ===========================================
+// LAYOUT UTILITIES (from layout-utils.ts)
+// SPLIT TO: src/components/workflow/layout-utils.ts
+// ===========================================
+export const defaultLayoutConfig: LayoutConfig = {
+  workflowWidth: 800,
+  workflowHeight: 450,
+  stageWidth: 220,
+  stageHeight: 90,
+  circleSize: 64,
+  padding: 30,
+  verticalSpacing: 40,
+};
+
+export const calculateDynamicLayout = (
+  workflowData: WorkflowData,
+  config: LayoutConfig = defaultLayoutConfig
+) => {
+  const { stages, statusNodes, entities } = workflowData;
+  const { workflowWidth, stageWidth, padding, verticalSpacing, stageHeight, circleSize } = config;
+
+  // Calculate horizontal spacing based on number of stages
+  const availableWidth = workflowWidth - (2 * padding);
+  const totalStageWidth = stages.length * stageWidth;
+  const stageSpacing = stages.length > 1 ? (availableWidth - totalStageWidth) / (stages.length - 1) : 0;
+
+  // Calculate positions for each row
+  const stageY = 70;
+  const circleY = stageY + stageHeight + verticalSpacing;
+  const entitiesY = circleY + circleSize + verticalSpacing;
+
+  return {
+    stageSpacing: Math.max(stageSpacing, 20), // Minimum spacing
+    stageY,
+    circleY,
+    entitiesY,
+    getStagePosition: (index: number) => ({
+      x: padding + (index * (stageWidth + stageSpacing)),
+      y: stageY,
+    }),
+    getCirclePosition: (index: number) => ({
+      x: padding + (index * (stageWidth + stageSpacing)) + (stageWidth / 2) - (circleSize / 2),
+      y: circleY,
+    }),
+    getEntitiesPosition: () => ({
+      x: padding,
+      y: entitiesY,
+    }),
+  };
+};
+
+export const createDynamicNodes = (
+  workflowData: WorkflowData,
+  entitiesExpanded: boolean,
+  onToggleEntities: () => void,
+  config: LayoutConfig = defaultLayoutConfig
+): Node[] => {
+  const nodes: Node[] = [];
+  const layout = calculateDynamicLayout(workflowData, config);
+
+  // PMF Tag (outside workflow)
+  nodes.push({
+    id: 'pmf-tag',
+    type: 'pmf-tag',
+    position: { x: 20, y: 20 },
+    data: {
+      title: 'PMF',
+      type: 'pmf-tag',
+      onClick: () => console.log('PMF tag clicked'),
+    } as WorkflowNodeData,
+    draggable: true,
+  });
+
+  // Main workflow container
+  nodes.push({
+    id: workflowData.workflow.id,
+    type: 'workflow',
+    position: { x: 20, y: 60 },
+    data: {
+      title: workflowData.workflow.title,
+      description: workflowData.workflow.description,
+      type: 'workflow',
+    } as WorkflowNodeData,
+    style: { width: config.workflowWidth, height: config.workflowHeight },
+    draggable: true,
+  });
+
+  // Stage nodes - positioned dynamically
+  workflowData.stages.forEach((stage, index) => {
+    const position = layout.getStagePosition(index);
+    
+    nodes.push({
+      id: stage.id,
+      type: 'stage',
+      position,
+      data: {
+        title: stage.title,
+        description: stage.description,
+        type: 'stage',
+        color: stage.color,
+        onClick: () => console.log(`${stage.title} event clicked`),
+      } as WorkflowNodeData,
+      parentId: workflowData.workflow.id,
+      extent: 'parent',
+      style: { width: config.stageWidth, height: config.stageHeight },
+      draggable: true,
+    });
+  });
+
+  // Status nodes (circular) - positioned dynamically
+  workflowData.statusNodes.forEach((status, index) => {
+    const position = layout.getCirclePosition(index);
+    
+    nodes.push({
+      id: status.id,
+      type: 'circular',
+      position,
+      data: {
+        label: status.label,
+        color: status.color,
+        onClick: () => console.log(`${status.label} status clicked`),
+      } as CircularNodeData,
+      parentId: workflowData.workflow.id,
+      extent: 'parent',
+      draggable: true,
+    });
+  });
+
+  // Entities group node
+  const entitiesPosition = layout.getEntitiesPosition();
+  nodes.push({
+    id: 'entities-group',
+    type: 'entities-group',
+    position: entitiesPosition,
+    data: {
+      title: 'Data Entities',
+      type: 'entities-group',
+      entities: workflowData.entities,
+      entitiesExpanded,
+      onToggleEntities,
+      onClick: () => console.log('Entities group clicked'),
+    } as WorkflowNodeData,
+    parentId: workflowData.workflow.id,
+    extent: 'parent' as const,
+    draggable: true,
+  });
+
+  return nodes;
+};
+
+// ===========================================
+// CONNECTION UTILITIES (from connection-utils.ts)
+// SPLIT TO: src/components/workflow/connection-utils.ts
+// ===========================================
+export const generateIntelligentConnections = (workflowData: WorkflowData): Edge[] => {
+  const edges: Edge[] = [];
+  const { stages, statusNodes } = workflowData;
+
+  // Connect stages to their corresponding status nodes
+  stages.forEach((stage, index) => {
+    // Find corresponding status node (either by explicit connection or by index)
+    const correspondingStatus = statusNodes.find(status => 
+      status.connectedToStage === stage.id
+    ) || statusNodes[index];
+
+    if (correspondingStatus) {
+      edges.push({
+        id: `${stage.id}-to-${correspondingStatus.id}`,
+        source: stage.id,
+        target: correspondingStatus.id,
+        style: { stroke: '#000', strokeWidth: 1 },
+        type: 'smoothstep',
+      });
+    }
+  });
+
+  // Connect status nodes to next stages in sequence
+  statusNodes.forEach((statusNode, index) => {
+    const nextStage = stages[index + 1];
+    if (nextStage) {
+      edges.push({
+        id: `${statusNode.id}-to-${nextStage.id}`,
+        source: statusNode.id,
+        target: nextStage.id,
+        style: { stroke: '#666', strokeWidth: 1 },
+        type: 'smoothstep',
+      });
+    }
+  });
+
+  return edges;
+};
+
+export const updateConnectionsForWorkflow = (
+  workflowData: WorkflowData,
+  existingEdges: Edge[] = []
+): Edge[] => {
+  // Generate new intelligent connections
+  const newConnections = generateIntelligentConnections(workflowData);
+  
+  // Keep any custom user-added edges that don't conflict
+  const customEdges = existingEdges.filter(edge => 
+    !newConnections.some(newEdge => newEdge.id === edge.id)
+  );
+
+  return [...newConnections, ...customEdges];
+};
+
+// ===========================================
+// WORKFLOW SIDEBAR COMPONENT (from WorkflowSidebar.tsx)  
+// SPLIT TO: src/components/workflow/WorkflowSidebar.tsx
+// ===========================================
+interface WorkflowSidebarProps {
+  selectedWorkflow: string;
+  onWorkflowSelect: (workflowId: string) => void;
+}
+
+const WorkflowSidebar = ({ selectedWorkflow, onWorkflowSelect }: WorkflowSidebarProps) => {
+  const legendItems = [
+    { color: 'bg-primary', label: 'Application' },
+    { color: 'bg-workflow-stage-bg border border-workflow-stage-border', label: 'Workflow' },
+    { color: 'bg-muted', label: 'Business Goal' },
+    { color: 'bg-workflow-data-bg border border-workflow-data-border', label: 'Data Entity' },
+  ];
+
+  const workflows = [
+    { id: 'hypo-loan-position', name: 'Hypo Loan Position' },
+    { id: 'hypo-loan', name: 'Hypo Loan' },
+    { id: 'workflow-1', name: 'Customer Onboarding' },
+    { id: 'workflow-2', name: 'Payment Processing' },
+  ];
+
+  return (
+    <div className="w-80 bg-workflow-bg border-l border-workflow-border p-4 space-y-4">
+      {/* Customize View */}
+      <Card className="p-4">
+        <h3 className="text-sm font-medium mb-3">Customize View</h3>
+        <label className="flex items-center gap-2 text-xs">
+          <input type="checkbox" defaultChecked className="rounded" />
+          Expand all data entities
+        </label>
+      </Card>
+
+      {/* Legend */}
+      <Card className="p-4">
+        <h3 className="text-sm font-medium mb-3">Legend</h3>
+        <div className="space-y-2">
+          {legendItems.map((item, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <div className={`w-4 h-4 rounded ${item.color}`} />
+              <span className="text-xs text-muted-foreground">{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Other Workflows */}
+      <Card className="p-4">
+        <h3 className="text-sm font-medium mb-3">Other Workflows</h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          Choose a different workflow to visualize
+        </p>
+        <div className="space-y-2">
+          {workflows.map((workflow) => (
+            <div
+              key={workflow.id}
+              className={`bg-workflow-stage-bg border rounded p-3 text-xs font-medium text-center cursor-pointer transition-colors ${
+                selectedWorkflow === workflow.id 
+                  ? 'border-primary bg-primary/10 text-primary' 
+                  : 'border-workflow-stage-border hover:bg-workflow-stage-border/20'
+              }`}
+              onClick={() => onWorkflowSelect(workflow.id)}
+            >
+              {workflow.name}
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+// ===========================================
+// WORKFLOW BUILDER COMPONENT (from WorkflowBuilder.tsx)
+// SPLIT TO: src/components/workflow/WorkflowBuilder.tsx
+// ===========================================
+interface WorkflowBuilderProps {
+  layoutConfig?: typeof defaultLayoutConfig;
+  selectedWorkflowId?: string;
+  workflowData?: WorkflowData;
+  onWorkflowSelect?: (workflowId: string) => void;
+}
+
+const nodeTypes = {
+  workflow: MemoizedWorkflowNode,
+  circular: MemoizedCircularNode,
+  stage: MemoizedWorkflowNode,
+  data: MemoizedWorkflowNode,
+  'pmf-tag': MemoizedWorkflowNode,
+  'entities-group': MemoizedWorkflowNode,
+};
+
+const WorkflowBuilder = ({ 
+  layoutConfig = defaultLayoutConfig,
+  selectedWorkflowId: externalWorkflowId,
+  workflowData: externalWorkflowData,
+  onWorkflowSelect: externalOnWorkflowSelect
+}: WorkflowBuilderProps = {}) => {
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState(externalWorkflowId || defaultWorkflow);
+  const [entitiesExpanded, setEntitiesExpanded] = useState(false);
+  
+  // Get current workflow data - prefer external data, fallback to mock data
+  const currentWorkflowData = externalWorkflowData || 
+                              mockWorkflows[selectedWorkflowId] || 
+                              mockWorkflows[defaultWorkflow];
+  
+  // Create initial nodes and edges dynamically
+  const initialNodes = createDynamicNodes(
+    currentWorkflowData, 
+    entitiesExpanded, 
+    () => setEntitiesExpanded(!entitiesExpanded),
+    layoutConfig
+  );
+  const initialEdges = updateConnectionsForWorkflow(currentWorkflowData);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  const onConnect = useCallback(
+    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
+    [setEdges]
+  );
+
+  // Handle workflow selection
+  const handleWorkflowSelect = (workflowId: string) => {
+    if (externalOnWorkflowSelect) {
+      // Use external handler (for SingleView navigation)
+      externalOnWorkflowSelect(workflowId);
+    } else {
+      // Use internal state (for standalone usage)
+      if (mockWorkflows[workflowId]) {
+        setSelectedWorkflowId(workflowId);
+        setEntitiesExpanded(false);
+      }
+    }
+  };
+
+  // Update nodes when entities expansion state changes or workflow changes
+  useEffect(() => {
+    const updatedNodes = createDynamicNodes(
+      currentWorkflowData,
+      entitiesExpanded,
+      () => setEntitiesExpanded(!entitiesExpanded),
+      layoutConfig
+    );
+    setNodes(updatedNodes);
+  }, [entitiesExpanded, currentWorkflowData, layoutConfig, setNodes]);
+
+  // Update connections when workflow data changes
+  useEffect(() => {
+    const updatedEdges = updateConnectionsForWorkflow(currentWorkflowData);
+    setEdges(updatedEdges);
+  }, [currentWorkflowData, setEdges]);
+
+  return (
+    <div className="flex h-screen bg-gray-100">
+      {/* Main Canvas */}
+      <div className="flex-1 p-2">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          nodeTypes={nodeTypes}
+          fitView
+          className="bg-gray-100"
+          defaultViewport={{ x: 0, y: 0, zoom: 0.9 }}
+          nodesDraggable={true}
+          nodesConnectable={true}
+          elementsSelectable={true}
+        >
+          <Background 
+            color="#d1d5db" 
+            gap={16}
+            size={1}
+          />
+          <Controls className="bg-white border border-gray-300 shadow-lg" />
+        </ReactFlow>
+      </div>
+
+      {/* Sidebar */}
+      <WorkflowSidebar 
+        selectedWorkflow={selectedWorkflowId}
+        onWorkflowSelect={handleWorkflowSelect}
+      />
+    </div>
+  );
+};
+
+// ============================================================================
+// WORKFLOW TYPES SECTION (Inlined from workflow/types.ts)
+// ============================================================================
+
+export interface WorkflowStage {
+  id: string;
+  title: string;
+  description: string;
+  color?: string;
+}
+
+export interface WorkflowStatusNode {
+  id: string;
+  label: string;
+  color?: string;
+  connectedToStage?: string;
+  connectedToEntities?: string[];
+}
+
+export interface WorkflowEntity {
+  id: string;
+  title: string;
+  color?: string;
+}
+
+export interface WorkflowData {
+  workflow: {
+    id: string;
+    title: string;
+    description: string;
+  };
+  stages: WorkflowStage[];
+  statusNodes: WorkflowStatusNode[];
+  entities: WorkflowEntity[];
+}
+
+export interface LayoutConfig {
+  workflowWidth: number;
+  workflowHeight: number;
+  stageWidth: number;
+  stageHeight: number;
+  circleSize: number;
+  padding: number;
+  verticalSpacing: number;
+}
+
+// ============================================================================
+// MOCK DATA SECTION (Inlined from workflow/mock-data.ts)
+// ============================================================================
+
+export const mockWorkflows: Record<string, WorkflowData> = {
+  'hypo-loan-position': {
+    workflow: {
+      id: 'hypo-loan-position-workflow',
+      title: 'Hypo Loan Position',
+      description: 'Workflow description',
+    },
+    stages: [
+      {
+        id: 'stage-node',
+        title: 'Stage',
+        description: 'PLMF stages commitment data in PMF database.',
+        color: 'gray',
+      },
+      {
+        id: 'enrich-node', 
+        title: 'Enrich',
+        description: 'PMF enriches hypo loan positions.',
+        color: 'gray',
+      }
+    ],
+    statusNodes: [
+      {
+        id: 'staged-circle',
+        label: 'staged',
+        color: 'gray',
+        connectedToStage: 'stage-node',
+        connectedToEntities: ['data-entity-1'],
+      },
+      {
+        id: 'position-created-circle',
+        label: 'position created',
+        color: 'gray',
+        connectedToStage: 'enrich-node',
+        connectedToEntities: ['data-entity-1'],
+      }
+    ],
+    entities: [
+      {
+        id: 'data-entity-1',
+        title: 'Hypo Loan Position',
+        color: 'yellow',
+      },
+      {
+        id: 'data-entity-2', 
+        title: 'Loan Commitment',
+        color: 'gray',
+      },
+      {
+        id: 'data-entity-3',
+        title: 'Hypo Loan Base Price',
+        color: 'gray',
+      }
+    ]
+  },
+
+  'hypo-loan': {
+    workflow: {
+      id: 'hypo-loan-workflow',
+      title: 'Hypo Loan',
+      description: 'Complete loan processing workflow',
+    },
+    stages: [
+      {
+        id: 'validate-stage',
+        title: 'Validate',
+        description: 'Validate loan application data.',
+        color: 'blue',
+      },
+      {
+        id: 'process-stage',
+        title: 'Process',
+        description: 'Process loan through system.',
+        color: 'green',
+      },
+      {
+        id: 'approve-stage',
+        title: 'Approve',
+        description: 'Final approval stage.',
+        color: 'purple',
+      }
+    ],
+    statusNodes: [
+      {
+        id: 'validated-status',
+        label: 'validated',
+        color: 'blue',
+        connectedToStage: 'validate-stage',
+        connectedToEntities: ['loan-entity', 'customer-entity'],
+      },
+      {
+        id: 'processed-status',
+        label: 'processed',
+        color: 'green',
+        connectedToStage: 'process-stage',
+        connectedToEntities: ['loan-entity', 'approval-entity'],
+      },
+      {
+        id: 'approved-status',
+        label: 'approved',
+        color: 'purple',
+        connectedToStage: 'approve-stage',
+        connectedToEntities: ['loan-entity', 'approval-entity'],
+      }
+    ],
+    entities: [
+      {
+        id: 'loan-entity',
+        title: 'Loan Application',
+        color: 'yellow',
+      },
+      {
+        id: 'customer-entity',
+        title: 'Customer Profile',
+        color: 'gray',
+      },
+      {
+        id: 'approval-entity',
+        title: 'Approval Record',
+        color: 'gray',
+      },
+      {
+        id: 'rate-entity',
+        title: 'Interest Rate',
+        color: 'gray',
+      }
+    ]
+  },
+
+  'workflow-1': {
+    workflow: {
+      id: 'workflow-1-id',
+      title: 'Customer Onboarding',
+      description: 'New customer registration workflow',
+    },
+    stages: [
+      {
+        id: 'registration-stage',
+        title: 'Register',
+        description: 'Customer registration process.',
+        color: 'orange',
+      },
+      {
+        id: 'verification-stage',
+        title: 'Verify',
+        description: 'Identity verification step.',
+        color: 'red',
+      }
+    ],
+    statusNodes: [
+      {
+        id: 'registered-status',
+        label: 'registered',
+        color: 'orange',
+        connectedToStage: 'registration-stage',
+        connectedToEntities: ['customer-profile'],
+      },
+      {
+        id: 'verified-status',
+        label: 'verified',
+        color: 'red',
+        connectedToStage: 'verification-stage',
+        connectedToEntities: ['customer-profile', 'verification-record'],
+      }
+    ],
+    entities: [
+      {
+        id: 'customer-profile',
+        title: 'Customer Profile',
+        color: 'yellow',
+      },
+      {
+        id: 'verification-record',
+        title: 'Verification Record',
+        color: 'gray',
+      },
+      {
+        id: 'compliance-check',
+        title: 'Compliance Check',
+        color: 'gray',
+      }
+    ]
+  },
+
+  'workflow-2': {
+    workflow: {
+      id: 'workflow-2-id',
+      title: 'Payment Processing',
+      description: 'Transaction payment workflow',
+    },
+    stages: [
+      {
+        id: 'capture-stage',
+        title: 'Capture',
+        description: 'Capture payment details.',
+        color: 'teal',
+      },
+      {
+        id: 'authorize-stage',
+        title: 'Authorize',
+        description: 'Authorize payment transaction.',
+        color: 'indigo',
+      },
+      {
+        id: 'settle-stage',
+        title: 'Settle',
+        description: 'Settle the payment.',
+        color: 'pink',
+      }
+    ],
+    statusNodes: [
+      {
+        id: 'captured-status',
+        label: 'captured',
+        color: 'teal',
+        connectedToStage: 'capture-stage',
+        connectedToEntities: ['payment-details'],
+      },
+      {
+        id: 'authorized-status',
+        label: 'authorized',
+        color: 'indigo',
+        connectedToStage: 'authorize-stage',
+        connectedToEntities: ['payment-details', 'auth-record'],
+      },
+      {
+        id: 'settled-status',
+        label: 'settled',
+        color: 'pink',
+        connectedToStage: 'settle-stage',
+        connectedToEntities: ['payment-details', 'settlement-record'],
+      }
+    ],
+    entities: [
+      {
+        id: 'payment-details',
+        title: 'Payment Details',
+        color: 'yellow',
+      },
+      {
+        id: 'auth-record',
+        title: 'Authorization Record',
+        color: 'gray',
+      },
+      {
+        id: 'settlement-record',
+        title: 'Settlement Record',
+        color: 'gray',
+      },
+      {
+        id: 'merchant-account',
+        title: 'Merchant Account',
+        color: 'gray',
+      },
+      {
+        id: 'transaction-log',
+        title: 'Transaction Log',
+        color: 'gray',
+      }
+    ]
+  }
+};
+
+export const defaultWorkflow = 'hypo-loan-position';
 
 // ============================================================================
 // TYPES SECTION - Move to: src/components/SingleView/types.ts
@@ -41,71 +992,8 @@ export interface WorkflowOption {
 }
 
 // ============================================================================
-// CONTEXT SECTION - Move to: src/components/SingleView/context/SelectionContext.tsx
+// REMOVED CONTEXT SECTION - Going directly to visualization
 // ============================================================================
-
-interface SelectionContextType {
-  selection: SelectionState;
-  updateSelection: (type: 'workflow' | 'entity', id: string) => void;
-  updateCustomizations: (customizations: Partial<ViewCustomizations>) => void;
-  clearSelection: () => void;
-}
-
-const SelectionContext = createContext<SelectionContextType | undefined>(undefined);
-
-const defaultCustomizations: ViewCustomizations = {
-  expandAllEntities: true,
-  showLegend: true,
-  showMiniMap: true,
-};
-
-const defaultSelection: SelectionState = {
-  selectedType: null,
-  selectedId: null,
-  customizations: defaultCustomizations,
-};
-
-export function SelectionProvider({ children }: { children: ReactNode }) {
-  const [selection, setSelection] = useState<SelectionState>(defaultSelection);
-
-  const updateSelection = (type: 'workflow' | 'entity', id: string) => {
-    setSelection(prev => ({
-      ...prev,
-      selectedType: type,
-      selectedId: id,
-    }));
-  };
-
-  const updateCustomizations = (customizations: Partial<ViewCustomizations>) => {
-    setSelection(prev => ({
-      ...prev,
-      customizations: { ...prev.customizations, ...customizations },
-    }));
-  };
-
-  const clearSelection = () => {
-    setSelection(defaultSelection);
-  };
-
-  return (
-    <SelectionContext.Provider value={{
-      selection,
-      updateSelection,
-      updateCustomizations,
-      clearSelection,
-    }}>
-      {children}
-    </SelectionContext.Provider>
-  );
-}
-
-export function useSelection() {
-  const context = useContext(SelectionContext);
-  if (context === undefined) {
-    throw new Error('useSelection must be used within a SelectionProvider');
-  }
-  return context;
-}
 
 // ============================================================================
 // HOOKS SECTION - Move to: src/components/SingleView/hooks/useWorkflowData.ts
@@ -272,42 +1160,52 @@ interface WorkflowSelectorProps {
 
 function WorkflowSelector({ workflows, selectedId, onSelect }: WorkflowSelectorProps) {
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-semibold mb-2">Workflows</h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Choose up to one workflow to visualize (MVP)
-        </p>
-      </div>
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>
+        Workflows
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Choose up to one workflow to visualize (MVP)
+      </Typography>
       
-      <div className="grid gap-3">
+      <Stack spacing={2}>
         {workflows.map((workflow) => (
-          <Card 
+          <Paper
             key={workflow.id}
-            className={`cursor-pointer transition-all hover:shadow-md ${
-              selectedId === workflow.id 
-                ? 'ring-2 ring-primary border-primary' 
-                : 'border-border hover:border-muted-foreground'
-            }`}
+            sx={{
+              p: 2,
+              cursor: 'pointer',
+              border: selectedId === workflow.id ? 2 : 1,
+              borderColor: selectedId === workflow.id ? 'primary.main' : 'divider',
+              '&:hover': {
+                boxShadow: 2,
+                borderColor: 'text.secondary'
+              }
+            }}
             onClick={() => onSelect(workflow.id)}
           >
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">{workflow.title}</CardTitle>
-                <div className={`w-4 h-4 rounded-full border-2 ${
-                  selectedId === workflow.id 
-                    ? 'bg-primary border-primary' 
-                    : 'border-muted-foreground'
-                }`} />
-              </div>
-              <CardDescription className="text-sm">
-                {workflow.description}
-              </CardDescription>
-            </CardHeader>
-          </Card>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="subtitle1" fontWeight="medium">
+                {workflow.title}
+              </Typography>
+              <Box 
+                sx={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: '50%',
+                  border: 2,
+                  borderColor: selectedId === workflow.id ? 'primary.main' : 'text.disabled',
+                  backgroundColor: selectedId === workflow.id ? 'primary.main' : 'transparent'
+                }}
+              />
+            </Box>
+            <Typography variant="body2" color="text.secondary">
+              {workflow.description}
+            </Typography>
+          </Paper>
         ))}
-      </div>
-    </div>
+      </Stack>
+    </Box>
   );
 }
 
@@ -323,55 +1221,61 @@ interface EntitySelectorProps {
 
 function EntitySelector({ entities, selectedId, onSelect }: EntitySelectorProps) {
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-semibold mb-2">Entities</h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Choose up to one entity to visualize (MVP)
-        </p>
-      </div>
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>
+        Entities
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Choose up to one entity to visualize (MVP)
+      </Typography>
       
       {entities.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-8">
-            <div className="text-center">
-              <Badge variant="secondary" className="mb-2">Coming Soon</Badge>
-              <p className="text-sm text-muted-foreground">
-                Entity visualization will be available in a future release
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <Paper sx={{ p: 4, textAlign: 'center', border: '2px dashed', borderColor: 'divider' }}>
+          <Chip label="Coming Soon" color="secondary" sx={{ mb: 2 }} />
+          <Typography variant="body2" color="text.secondary">
+            Entity visualization will be available in a future release
+          </Typography>
+        </Paper>
       ) : (
-        <div className="grid gap-3">
+        <Stack spacing={2}>
           {entities.map((entity) => (
-            <Card 
+            <Paper
               key={entity.id}
-              className={`cursor-pointer transition-all hover:shadow-md ${
-                selectedId === entity.id 
-                  ? 'ring-2 ring-primary border-primary' 
-                  : 'border-border hover:border-muted-foreground'
-              }`}
+              sx={{
+                p: 2,
+                cursor: 'pointer',
+                border: selectedId === entity.id ? 2 : 1,
+                borderColor: selectedId === entity.id ? 'primary.main' : 'divider',
+                '&:hover': {
+                  boxShadow: 2,
+                  borderColor: 'text.secondary'
+                }
+              }}
               onClick={() => onSelect(entity.id)}
             >
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">{entity.title}</CardTitle>
-                  <div className={`w-4 h-4 rounded-full border-2 ${
-                    selectedId === entity.id 
-                      ? 'bg-primary border-primary' 
-                      : 'border-muted-foreground'
-                  }`} />
-                </div>
-                <CardDescription className="text-sm">
-                  {entity.description}
-                </CardDescription>
-              </CardHeader>
-            </Card>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="subtitle1" fontWeight="medium">
+                  {entity.title}
+                </Typography>
+                <Box 
+                  sx={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: '50%',
+                    border: 2,
+                    borderColor: selectedId === entity.id ? 'primary.main' : 'text.disabled',
+                    backgroundColor: selectedId === entity.id ? 'primary.main' : 'transparent'
+                  }}
+                />
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                {entity.description}
+              </Typography>
+            </Paper>
           ))}
-        </div>
+        </Stack>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -388,61 +1292,103 @@ function CustomizationPanel({ customizations, onUpdate }: CustomizationPanelProp
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Customize View</CardTitle>
-        <CardDescription>
+        <Typography variant="h6">Customize View</Typography>
+        <Typography variant="body2" color="text.secondary">
           Configure how the workflow visualization will appear
-        </CardDescription>
+        </Typography>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label htmlFor="expand-entities" className="text-sm font-medium">
-              Expand All Entities
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Show all entity details by default
-            </p>
-          </div>
-          <Switch
-            id="expand-entities"
-            checked={customizations.expandAllEntities}
-            onCheckedChange={(checked) => onUpdate({ expandAllEntities: checked })}
-          />
-        </div>
+      <CardContent>
+        <Stack spacing={3}>
+          <Box>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={customizations.expandAllEntities}
+                  onChange={(e) => onUpdate({ expandAllEntities: e.target.checked })}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2" fontWeight="medium">
+                    Expand All Entities
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Show all entity details by default
+                  </Typography>
+                </Box>
+              }
+            />
+          </Box>
 
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label htmlFor="show-legend" className="text-sm font-medium">
-              Show Legend
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Display legend panel in the visualization
-            </p>
-          </div>
-          <Switch
-            id="show-legend"
-            checked={customizations.showLegend}
-            onCheckedChange={(checked) => onUpdate({ showLegend: checked })}
-          />
-        </div>
+          <Box>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={customizations.showLegend}
+                  onChange={(e) => onUpdate({ showLegend: e.target.checked })}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2" fontWeight="medium">
+                    Show Legend
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Display legend panel in the visualization
+                  </Typography>
+                </Box>
+              }
+            />
+          </Box>
 
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label htmlFor="show-minimap" className="text-sm font-medium">
-              Show Mini Map
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Display navigation mini map
-            </p>
-          </div>
-          <Switch
-            id="show-minimap"
-            checked={customizations.showMiniMap}
-            onCheckedChange={(checked) => onUpdate({ showMiniMap: checked })}
-          />
-        </div>
+          <Box>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={customizations.showMiniMap}
+                  onChange={(e) => onUpdate({ showMiniMap: e.target.checked })}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2" fontWeight="medium">
+                    Show Mini Map
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Display navigation mini map
+                  </Typography>
+                </Box>
+              }
+            />
+          </Box>
+        </Stack>
       </CardContent>
     </Card>
+  );
+}
+
+// Custom TabPanel component for Material UI Tabs
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel({ children, value, index, ...other }: TabPanelProps) {
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`simple-tabpanel-${index}`}
+      aria-labelledby={`simple-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
   );
 }
 
@@ -450,240 +1396,72 @@ function CustomizationPanel({ customizations, onUpdate }: CustomizationPanelProp
 // SELECTION PAGE COMPONENT - Move to: src/components/SingleView/SelectionPage.tsx
 // ============================================================================
 
-export function SelectionPage() {
-  const navigate = useNavigate();
-  const { selection, updateSelection, updateCustomizations } = useSelection();
-  const { workflows, entities } = useAvailableOptions();
-  const [activeTab, setActiveTab] = useState<'workflows' | 'entities'>('workflows');
-
-  const handleWorkflowSelect = (id: string) => {
-    updateSelection('workflow', id);
-    setActiveTab('workflows');
-  };
-
-  const handleEntitySelect = (id: string) => {
-    updateSelection('entity', id);
-    setActiveTab('entities');
-  };
-
-  const handleVisualize = () => {
-    if (selection.selectedType && selection.selectedId) {
-      navigate(`/visualization/${selection.selectedType}/${selection.selectedId}`);
-    }
-  };
-
-  const canVisualize = selection.selectedType && selection.selectedId;
-
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => navigate('/')}
-                className="gap-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </Button>
-              <div>
-                <h1 className="text-2xl font-bold">Pipeline Management Framework</h1>
-                <p className="text-sm text-muted-foreground">
-                  Select a workflow or entity to visualize
-                </p>
-              </div>
-            </div>
-            <Button 
-              onClick={handleVisualize}
-              disabled={!canVisualize}
-              className="gap-2"
-              size="lg"
-            >
-              <Eye className="h-4 w-4" />
-              Visualize
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Selection Panel */}
-          <div className="lg:col-span-2">
-            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'workflows' | 'entities')}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="workflows">
-                  Workflows ({workflows.length})
-                </TabsTrigger>
-                <TabsTrigger value="entities">
-                  Entities ({entities.length})
-                </TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="workflows" className="mt-6">
-                <WorkflowSelector
-                  workflows={workflows}
-                  selectedId={selection.selectedType === 'workflow' ? selection.selectedId : null}
-                  onSelect={handleWorkflowSelect}
-                />
-              </TabsContent>
-              
-              <TabsContent value="entities" className="mt-6">
-                <EntitySelector
-                  entities={entities}
-                  selectedId={selection.selectedType === 'entity' ? selection.selectedId : null}
-                  onSelect={handleEntitySelect}
-                />
-              </TabsContent>
-            </Tabs>
-          </div>
-
-          {/* Customization Panel */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-8">
-              <CustomizationPanel
-                customizations={selection.customizations}
-                onUpdate={updateCustomizations}
-              />
-              
-              {/* Selection Summary */}
-              {canVisualize && (
-                <div className="mt-6 p-4 bg-primary/5 border border-primary/20 rounded-lg">
-                  <h4 className="font-semibold text-sm mb-2">Selected for Visualization:</h4>
-                  <p className="text-sm">
-                    <span className="capitalize">{selection.selectedType}:</span>{' '}
-                    {selection.selectedType === 'workflow' 
-                      ? workflows.find(w => w.id === selection.selectedId)?.title
-                      : entities.find(e => e.id === selection.selectedId)?.title
-                    }
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-}
+// ============================================================================
+// REMOVED SELECTION PAGE - Going directly to visualization  
+// ============================================================================
 
 // ============================================================================
 // VISUALIZATION PAGE COMPONENT - Move to: src/components/SingleView/VisualizationPage.tsx
 // ============================================================================
 
 export function VisualizationPage() {
+  console.log('VisualizationPage component starting...');
   const { type, id } = useParams<{ type: string; id: string }>();
   const navigate = useNavigate();
-  const { selection, updateSelection } = useSelection();
+  
+  // Default to first workflow if no URL params
+  const workflowId = id || 'workflow-1';
   const availableWorkflows = useAvailableWorkflows();
   
-  // Get workflow data based on URL params (handles backend integration)
+  // Get workflow data - use default workflow if no URL params
   const workflowData = useWorkflowData(
-    (type === 'workflow' || type === 'entity') ? type : null, 
-    id || null
-  );
+    'workflow', 
+    workflowId
+  ) || mockWorkflows[workflowId];
 
   // Handle workflow switching from sidebar
   const handleWorkflowSelect = (workflowId: string) => {
     navigate(`/visualization/workflow/${workflowId}`);
   };
 
-  // Sync URL params with selection context
-  useEffect(() => {
-    if (type && id && (type === 'workflow' || type === 'entity')) {
-      if (selection.selectedType !== type || selection.selectedId !== id) {
-        updateSelection(type, id);
-      }
-    }
-  }, [type, id, selection.selectedType, selection.selectedId, updateSelection]);
-
-  // Handle missing data
-  if (!type || !id) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-workflow-bg">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">Invalid URL</h2>
-          <p className="text-muted-foreground mb-4">
-            Please select a workflow or entity to visualize
-          </p>
-          <Button onClick={() => navigate('/selection')}>
-            Go to Selection
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  // Display the workflow visualization directly
+  const displayWorkflowId = workflowId;
 
   if (!workflowData) {
     return (
-      <div className="h-screen flex items-center justify-center bg-workflow-bg">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">
-            {type === 'workflow' ? 'Workflow' : 'Entity'} Not Found
-          </h2>
-          <p className="text-muted-foreground mb-4">
-            The {type} "{id}" could not be loaded
-          </p>
-          <Button onClick={() => navigate('/selection')}>
-            Back to Selection
-          </Button>
-        </div>
-      </div>
+      <Box sx={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h5" fontWeight="bold" sx={{ mb: 2 }}>
+            Workflow Not Found
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            The workflow "{displayWorkflowId}" could not be loaded
+          </Typography>
+        </Paper>
+      </Box>
     );
   }
 
   return (
-    <div className="h-screen flex flex-col bg-workflow-bg">
-      {/* Enhanced Header with Navigation */}
-      <header className="border-b bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => navigate('/selection')}
-                className="gap-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Selection
-              </Button>
-              <div>
-                <h1 className="text-lg font-semibold">
-                  {workflowData.workflow.title}
-                </h1>
-                <p className="text-xs text-muted-foreground">
-                  {type === 'workflow' ? 'Workflow' : 'Entity'} Visualization
-                </p>
-              </div>
-            </div>
-            <Button 
-              variant="outline"
-              size="sm"
-              onClick={() => navigate('/selection')}
-              className="gap-2"
-            >
-              <Settings className="h-4 w-4" />
-              Change Selection
-            </Button>
-          </div>
-        </div>
-      </header>
+    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* Enhanced Header */}
+      <AppBar position="static" color="transparent" elevation={1}>
+        <Toolbar>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Workflow Visualization - {workflowData.workflow.title}
+          </Typography>
+        </Toolbar>
+      </AppBar>
 
       {/* Workflow Visualization */}
-      <div className="flex-1">
+      <Box sx={{ flexGrow: 1 }}>
         <WorkflowBuilder 
-          selectedWorkflowId={id || undefined}
-          workflowData={workflowData || undefined}
+          selectedWorkflowId={displayWorkflowId}
+          workflowData={workflowData}
           onWorkflowSelect={handleWorkflowSelect}
         />
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -695,48 +1473,47 @@ export function LandingPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="h-screen flex flex-col bg-workflow-bg">
+    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Hero Section */}
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center max-w-2xl mx-auto px-4">
-          <h1 className="text-4xl font-bold tracking-tight mb-4">
-            Pipeline Management Framework
-          </h1>
-          <p className="text-xl text-muted-foreground mb-8">
-            Visualize and manage your workflows and entities with our intuitive single-view system
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              size="lg" 
-              onClick={() => navigate('/selection')}
-              className="gap-2"
-            >
-              <Eye className="h-5 w-5" />
-              Start Visualization
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+      <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Container maxWidth="md">
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="h2" fontWeight="bold" sx={{ mb: 2 }}>
+              Pipeline Management Framework
+            </Typography>
+            <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
+              Visualize and manage your workflows and entities with our intuitive single-view system
+            </Typography>
             
-            <Button 
-              variant="outline" 
-              size="lg"
-              onClick={() => navigate('/selection')}
-              className="gap-2"
-            >
-              <Settings className="h-5 w-5" />
-              Configure & Select
-            </Button>
-          </div>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" sx={{ mb: 6 }}>
+              <Button 
+                variant="contained"
+                size="large"
+                startIcon={<Visibility />}
+                endIcon={<ArrowForward />}
+                onClick={() => navigate('/selection')}
+              >
+                Start Visualization
+              </Button>
+              
+              <Button 
+                variant="outlined"
+                size="large"
+                startIcon={<Settings />}
+                onClick={() => navigate('/selection')}
+              >
+                Configure & Select
+              </Button>
+            </Stack>
 
-          <div className="mt-12 text-sm text-muted-foreground">
-            <p>
+            <Typography variant="body2" color="text.secondary">
               Choose from available workflows and entities • Customize your view • 
               Visualize with interactive React Flow
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
+            </Typography>
+          </Box>
+        </Container>
+      </Box>
+    </Box>
   );
 }
 
@@ -746,46 +1523,3 @@ export function LandingPage() {
 
 // Functions and components are already exported inline above
 // No need for duplicate exports here
-
-// ============================================================================
-// SPLITTING GUIDE
-// ============================================================================
-/*
-TO SPLIT THIS FILE INTO SEPARATE FILES:
-
-1. TYPES:
-   - Copy the "TYPES SECTION" to: src/components/SingleView/types.ts
-
-2. CONTEXT:
-   - Copy the "CONTEXT SECTION" to: src/components/SingleView/context/SelectionContext.tsx
-
-3. HOOKS:
-   - Copy the "HOOKS SECTION" to: src/components/SingleView/hooks/useWorkflowData.ts
-
-4. API SERVICE:
-   - Copy the "API SERVICE SECTION" to: src/components/SingleView/services/WorkflowAPI.ts
-
-5. COMPONENTS:
-   - Copy "WORKFLOW SELECTOR COMPONENT" to: src/components/SingleView/components/WorkflowSelector.tsx
-   - Copy "ENTITY SELECTOR COMPONENT" to: src/components/SingleView/components/EntitySelector.tsx
-   - Copy "CUSTOMIZATION PANEL COMPONENT" to: src/components/SingleView/components/CustomizationPanel.tsx
-
-6. PAGES:
-   - Copy "SELECTION PAGE COMPONENT" to: src/components/SingleView/SelectionPage.tsx
-   - Copy "VISUALIZATION PAGE COMPONENT" to: src/components/SingleView/VisualizationPage.tsx
-   - Copy "LANDING PAGE COMPONENT" to: src/pages/Index.tsx (or keep in main pages folder)
-
-7. INDEX FILE:
-   - Copy "MAIN EXPORTS" to: src/components/SingleView/index.tsx
-   - Add proper imports for all the split files
-
-8. UPDATE IMPORTS:
-   - Update App.tsx to import from the new index file
-   - Update any other files that import from this single file
-
-REMEMBER TO:
-- Add proper imports to each split file
-- Export components/functions from each file
-- Update the index.tsx to re-export everything
-- Test that everything still works after splitting
-*/
